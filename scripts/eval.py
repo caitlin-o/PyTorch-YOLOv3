@@ -7,10 +7,10 @@ import tqdm
 import torch
 from torch.autograd import Variable
 
-from models import Darknet
-from utils.datasets import ListDataset
-from utils.parse_config import parse_data_config
-from utils.utils import (
+from torch_yolo3.models import Darknet
+from torch_yolo3.datasets import ListDataset
+from torch_yolo3.parse_config import parse_data_config
+from torch_yolo3.utils import (
     load_classes, xywh2xyxy, non_max_suppression, get_batch_statistics, ap_per_class)
 
 

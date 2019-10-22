@@ -10,6 +10,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 from .augmentations import horisontal_flip
+from .utils import update_path
 
 
 def pad_to_square(img, pad_value):
@@ -21,7 +22,6 @@ def pad_to_square(img, pad_value):
     pad = (0, 0, pad1, pad2) if h <= w else (pad1, pad2, 0, 0)
     # Add padding
     img = F.pad(img, pad, "constant", value=pad_value)
-
     return img, pad
 
 
@@ -37,6 +37,17 @@ def random_resize(images, min_size=288, max_size=448):
 
 
 class ImageFolder(Dataset):
+    """Infinite loading images from folder.
+
+    >>> im_dir = ImageFolder(update_path(os.path.join('data', 'samples')))
+    >>> len(im_dir)
+    9
+    >>> p_im, img = im_dir[0]
+    >>> p_im  # doctest: +ELLIPSIS
+    '...data/samples/dog.jpg'
+    >>> img.shape
+    torch.Size([3, 416, 416])
+    """
     def __init__(self, folder_path, img_size=416):
         self.files = sorted(glob.glob("%s/*.*" % folder_path))
         self.img_size = img_size
@@ -57,6 +68,22 @@ class ImageFolder(Dataset):
 
 
 class ListDataset(Dataset):
+    """Loading data from a list
+
+    >>> data = ListDataset(update_path(os.path.join('data', 'custom', 'train.txt')))
+    >>> len(data)
+    1
+    >>> p_im, img, det = data[0]
+    >>> p_im  # doctest: +ELLIPSIS
+    '.../data/custom/images/train.jpg'
+    >>> img.shape
+    torch.Size([3, 500, 500])
+    >>> det.shape
+    torch.Size([1, 6])
+    >>> batch = [data[0], data[1]]
+    >>> data.collate_fn(batch)  # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
+    (('.../images/train.jpg', '.../images/train.jpg'), tensor(...), tensor([[...], [...]]))
+    """
     def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True):
         with open(list_path, "r") as file:
             self.img_files = file.readlines()
@@ -74,13 +101,14 @@ class ListDataset(Dataset):
         self.max_size = self.img_size + 3 * 32
         self.batch_count = 0
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
 
         # ---------
         #  Image
         # ---------
-
-        img_path = self.img_files[index % len(self.img_files)].rstrip()
+        idx = idx % len(self.img_files)
+        img_path = self.img_files[idx].rstrip()
+        img_path = update_path(img_path)
 
         # Extract image as PyTorch tensor
         img = transforms.ToTensor()(Image.open(img_path).convert('RGB'))
@@ -100,7 +128,8 @@ class ListDataset(Dataset):
         #  Label
         # ---------
 
-        label_path = self.label_files[index % len(self.img_files)].rstrip()
+        label_path = self.label_files[idx].rstrip()
+        label_path = update_path(label_path)
 
         targets = None
         if os.path.exists(label_path):

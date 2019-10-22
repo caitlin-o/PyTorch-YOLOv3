@@ -11,20 +11,20 @@ A minimal PyTorch implementation of YOLOv3, with support for training, inference
 
 Clone and install requirements
 ```bash
-git clone <repository-URL>
+git clone {this-repository}
 cd PyTorch-YOLOv3/
 pip3 install -r requirements.txt --user
 ```
 
 Download pre-trained weights
 ```bash
-cd weights/
+cd weights
 bash download_weights.sh
 ```
 
 Download COCO
 ```bash
-cd data/
+cd data
 bash get_coco_dataset.sh
 ```
     
@@ -32,7 +32,7 @@ bash get_coco_dataset.sh
 Evaluates the model on COCO test.
 
 ```bash
-python3 test.py --weights_path weights/yolov3.weights
+python3 scripts/test.py --weights_path weights/yolov3.weights
 ```
 
 | Model                   | mAP (min. 50 IoU) |
@@ -53,7 +53,7 @@ Uses pretrained weights to make predictions on images. Below table displays the 
 | Darknet-53 (this impl.) | 1080ti   | 74       |
 
 ```bash
-python3 detect.py --image_folder data/samples/
+python3 scripts/detect.py --image_folder data/samples
 ```
 
 ![](assets/giraffe.png)
@@ -77,7 +77,7 @@ train.py [-h] [--epochs EPOCHS] [--batch_size BATCH_SIZE]
 #### Example (COCO)
 To train on COCO using a Darknet-53 backend pretrained on ImageNet run: 
 ```bash
-python3 train.py --data_config config/coco.data  --pretrained_weights weights/darknet53.conv.74
+python3 scripts/train.py --data_config config/coco.data  --pretrained_weights weights/darknet53.conv.74
 ```
 
 #### Training log
@@ -122,7 +122,7 @@ tensorboard --logdir='logs' --port=6006
 Run the commands below to create a custom model definition, replacing `<num-classes>` with the number of classes in your dataset.
 
 ```bash
-cd config/                                 # Navigate to config dir
+cd config                                  # Navigate to config dir
 bash create_custom_model.sh <num-classes>  # Will create custom model 'yolov3-custom.cfg'
 ```
 
@@ -142,7 +142,7 @@ In `data/custom/train.txt` and `data/custom/valid.txt`, add paths to images that
 To train on the custom dataset run:
 
 ```bash
-python3 train.py --model_def config/yolov3-custom.cfg --data_config config/custom.data
+python3 scripts/train.py --model_def config/yolov3-custom.cfg --data_config config/custom.data
 ```
 
 Add `--pretrained_weights weights/darknet53.conv.74` to train using a backend pretrained on ImageNet.

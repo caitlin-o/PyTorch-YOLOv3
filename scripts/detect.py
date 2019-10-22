@@ -15,9 +15,9 @@ from matplotlib.ticker import NullLocator
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
-from models import Darknet
-from utils.datasets import ImageFolder
-from utils.utils import load_classes, non_max_suppression, rescale_boxes
+from torch_yolo3.models import Darknet
+from torch_yolo3.datasets import ImageFolder
+from torch_yolo3.utils import load_classes, non_max_suppression, rescale_boxes
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -1,8 +1,38 @@
 from __future__ import division
 
+import os
+
 import numpy as np
 import tqdm
 import torch
+
+
+def update_path(my_path, max_depth=5, abs_path=True):
+    """ update path as bobble up strategy
+
+    :param str my_path:
+    :param int max_depth:
+    :param bool abs_path:
+    :return:
+
+    >>> os.path.isdir(update_path('data'))
+    True
+    """
+    if not my_path or my_path.startswith('/'):
+        return my_path
+    elif my_path.startswith('~'):
+        return os.path.expanduser(my_path)
+
+    up_path = my_path
+    for _ in range(max_depth):
+        if os.path.exists(up_path):
+            my_path = up_path
+            break
+        up_path = os.path.join('..', up_path)
+
+    if abs_path:
+        my_path = os.path.abspath(my_path)
+    return my_path
 
 
 def to_cpu(tensor):

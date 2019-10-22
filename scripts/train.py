@@ -9,12 +9,12 @@ import torch
 from terminaltables import AsciiTable
 from torch.autograd import Variable
 
-from models import Darknet
+from torch_yolo3.models import Darknet
 from test import evaluate
-from utils.datasets import ListDataset
-from utils.logger import Logger
-from utils.parse_config import parse_data_config
-from utils.utils import load_classes, weights_init_normal
+from torch_yolo3.datasets import ListDataset
+from torch_yolo3.logger import Logger
+from torch_yolo3.parse_config import parse_data_config
+from torch_yolo3.utils import load_classes, weights_init_normal
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

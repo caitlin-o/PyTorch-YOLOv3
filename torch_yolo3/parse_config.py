@@ -1,5 +1,12 @@
 def parse_model_config(path):
-    """Parses the yolo-v3 layer configuration file and returns module definitions"""
+    """Parses the yolo-v3 layer configuration file and returns module definitions.
+
+    >>> import os
+    >>> from torch_yolo3.utils import update_path
+    >>> conf = parse_model_config(update_path(os.path.join('config', 'yolov3-tiny.cfg')))
+    >>> len(conf)
+    25
+    """
     file = open(path, 'r')
     lines = file.read().split('\n')
     lines = [x for x in lines if x and not x.startswith('#')]
@@ -20,7 +27,14 @@ def parse_model_config(path):
 
 
 def parse_data_config(path):
-    """Parses the data configuration file"""
+    """Parses the data configuration file.
+
+    >>> import os
+    >>> from torch_yolo3.utils import update_path
+    >>> conf = parse_data_config(update_path(os.path.join( 'config', 'coco.data')))
+    >>> len(conf)
+    8
+    """
     options = dict()
     options['gpus'] = '0,1,2,3'
     options['num_workers'] = '10'
