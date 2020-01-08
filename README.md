@@ -32,7 +32,7 @@ bash get_coco_dataset.sh
 Evaluates the model on COCO test.
 
 ```bash
-python3 scripts/test.py --weights_path weights/yolov3.weights
+python3 scripts/eval.py --weights_path weights/yolov3.weights
 ```
 
 | Model                   | mAP (min. 50 IoU) |

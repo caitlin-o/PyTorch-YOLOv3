@@ -10,21 +10,21 @@ from terminaltables import AsciiTable
 from torch.autograd import Variable
 
 from torch_yolo3.models import Darknet
-from test import evaluate
 from torch_yolo3.datasets import ListDataset
 from torch_yolo3.logger import Logger
 from torch_yolo3.parse_config import parse_data_config
 from torch_yolo3.utils import load_classes, weights_init_normal
+from test import evaluate
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="size of each image batch")
-    parser.add_argument("--gradient_accumulations", type=int, default=2, help="number of gradient accums before step")
-    parser.add_argument("--model_def", type=str, default="config/yolov3.cfg", help="path to model definition file")
-    parser.add_argument("--data_config", type=str, default="config/coco.data", help="path to data config file")
-    parser.add_argument("--pretrained_weights", type=str, help="if specified starts from checkpoint model")
-    parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
+    parser.add_argument("--grad_accums", type=int, default=2, help="number of gradient accumulations before step")
+    parser.add_argument("--model_def", type=str, default="config/yolov3.cfg", help="path_img to model definition file")
+    parser.add_argument("--data_config", type=str, default="config/coco.data", help="path_img to data config file")
+    parser.add_argument("--trained_weights", type=str, help="if specified starts from checkpoint model")
+    parser.add_argument("--nb_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
@@ -51,11 +51,11 @@ if __name__ == "__main__":
     model.apply(weights_init_normal)
 
     # If specified we start from checkpoint
-    if opt.pretrained_weights:
-        if opt.pretrained_weights.endswith(".pth"):
-            model.load_state_dict(torch.load(opt.pretrained_weights))
+    if opt.trained_weights:
+        if opt.trained_weights.endswith(".pth"):
+            model.load_state_dict(torch.load(opt.trained_weights))
         else:
-            model.load_darknet_weights(opt.pretrained_weights)
+            model.load_darknet_weights(opt.trained_weights)
 
     # Get dataloader
     dataset = ListDataset(train_path, augment=True, multiscale=opt.multiscale_training)
@@ -99,7 +99,7 @@ if __name__ == "__main__":
             loss, outputs = model(imgs, targets)
             loss.backward()
 
-            if batches_done % opt.gradient_accumulations:
+            if batches_done % opt.grad_accums:
                 # Accumulates gradient before each step
                 optimizer.step()
                 optimizer.zero_grad()
