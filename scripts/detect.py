@@ -1,3 +1,18 @@
+"""Run detection on custom image folder.
+
+Example
+-------
+python3 scripts/detect.py \
+    --image_folder ./data_images \
+    --model_def ./config/yolov3.cfg \
+    --weights_path ./weights/yolov3.weights \
+    --output_folder ./output \
+    --class_path ./data/coco.names \
+    --batch_size 5 \
+    --nb_cpu 9
+
+"""
+
 from __future__ import division
 
 import argparse
@@ -65,6 +80,7 @@ def main(image_folder, model_def, weights_path, class_path, output_folder, img_s
         img_paths.extend(path_imgs)
         img_detections.extend(detects)
         pbar.update(len(path_imgs))
+    pbar.close()
 
     # Bounding-box colors
     cmap = plt.get_cmap("jet")
@@ -129,7 +145,7 @@ if __name__ == "__main__":
     parser.add_argument("--class_path", type=str, default="data/coco.names", help="path_img to class label file")
     parser.add_argument("--conf_thres", type=float, default=0.8, help="object confidence threshold")
     parser.add_argument("--nms_thres", type=float, default=0.4, help="iou threshold for non-maximum suppression")
-    parser.add_argument("--batch_size", type=int, default=5, help="size of the batches")
+    parser.add_argument("--batch_size", type=int, default=1, help="size of the batches")
     parser.add_argument("--nb_cpu", type=int, default=1, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=608, help="size of each image dimension")
     parser.add_argument("--checkpoint_model", type=str, help="path_img to checkpoint model")

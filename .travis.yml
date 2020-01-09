@@ -21,7 +21,13 @@ install:
   - pip install tox codecov
   - pip list
 
-script: tox --sitepackages
+script:
+  - tox --sitepackages
+  - pip install "pillow<7.0.0"  # this is temporal fix for some prd-party package issues
+  - pip install -r requirements.txt
+  - pip install -e .
+  - wget -c https://pjreddie.com/media/files/yolov3-tiny.weights -P ./weights --progress=bar:force:noscroll
+  - python scripts/detect.py --image_folder ./data/samples --model_def ./config/yolov3-tiny.cfg --weights_path ./weights/yolov3-tiny.weights --class_path ./data/coco.names --output_folder ./output
 
 after_success: codecov
 
