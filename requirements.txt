@@ -1,8 +1,7 @@
 numpy
-torch>=1.0
+torch>=1.2
 torchvision
 matplotlib
-tensorflow>1.0, <2.0
 tensorboard
 terminaltables
 # pillow  # already installed by torchvision
