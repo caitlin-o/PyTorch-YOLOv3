@@ -39,12 +39,13 @@ def to_cpu(tensor):
     return tensor.detach().cpu()
 
 
-def load_classes(path):
+def load_classes(file_path):
     """
     Loads class labels at 'path'
     """
-    fp = open(path, "r")
-    names = fp.read().split("\n")[:-1]
+    assert os.path.isfile(file_path)
+    with open(file_path, "r") as fp:
+        names = fp.read().split("\n")[:-1]
     return names
 
 

@@ -66,7 +66,7 @@ python3 scripts/detect.py --image_folder data/samples
 train.py [-h] [--epochs EPOCHS] [--batch_size BATCH_SIZE]
               [--gradient_accumulations GRADIENT_ACCUMULATIONS]
               [--model_def MODEL_DEF] [--data_config DATA_CONFIG]
-              [--pretrained_weights PRETRAINED_WEIGHTS] [--n_cpu N_CPU]
+              [--pretrained_weights PRETRAINED_WEIGHTS] [--nb_cpu NB_CPU]
               [--img_size IMG_SIZE]
               [--checkpoint_interval CHECKPOINT_INTERVAL]
               [--evaluation_interval EVALUATION_INTERVAL]

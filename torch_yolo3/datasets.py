@@ -1,6 +1,7 @@
 import glob
 import os
 import random
+import logging
 
 import numpy as np
 import torch
@@ -48,8 +49,11 @@ class ImageFolder(Dataset):
     >>> img.shape
     torch.Size([3, 416, 416])
     """
+    IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.tif')
+
     def __init__(self, folder_path, img_size=416):
-        self.files = sorted(glob.glob("%s/*.*" % folder_path))
+        self.files = sorted([p for p in glob.glob(os.path.join(folder_path, "*.*"))
+                             if os.path.splitext(os.path.basename(p))[1] in self.IMAGE_EXTENSIONS])
         self.img_size = img_size
 
     def __getitem__(self, index):
@@ -75,25 +79,34 @@ class ListDataset(Dataset):
     1
     >>> p_im, img, det = data[0]
     >>> p_im  # doctest: +ELLIPSIS
-    '.../data/custom/images/train.jpg'
+    '.../data/custom/images/coach.jpg'
     >>> img.shape
     torch.Size([3, 500, 500])
     >>> det.shape
     torch.Size([1, 6])
     >>> batch = [data[0], data[1]]
     >>> data.collate_fn(batch)  # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
-    (('.../images/train.jpg', '.../images/train.jpg'), tensor(...), tensor([[...], [...]]))
+    (('.../images/coach.jpg', '.../images/coach.jpg'), tensor(...), tensor([[...], [...]]))
     """
-    def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True):
+    def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True, max_objects=100):
         with open(list_path, "r") as file:
-            self.img_files = file.readlines()
+            img_files = [fn.strip() for fn in file.readlines()]
 
-        self.label_files = [
-            path.replace("images", "labels").replace(".png", ".txt").replace(".jpg", ".txt")
-            for path in self.img_files
+        # get the labels for each image if image exista
+        label_files = [
+            os.path.join(os.path.dirname(imp).replace("images", "labels"),
+                         os.path.splitext(os.path.basename(imp))[0] + ".txt")
+            for imp in img_files if os.path.isfile(imp)
         ]
+        logging.info("From %i listed, found %i images", len(img_files), len(label_files))
+        # filter existing image and annotation
+        path_img_lbs = [(p_img, p_lbs) for p_img, p_lbs in zip(img_files, label_files)
+                        if os.path.isfile(p_img) and os.path.isfile(p_lbs)]
+        self.img_files, self.label_files = list(zip(*path_img_lbs))
+        logging.info("From %i listed found %i annotation", len(path_img_lbs), len(self.label_files))
+
         self.img_size = img_size
-        self.max_objects = 100
+        self.max_objects = max_objects
         self.augment = augment
         self.multiscale = multiscale
         self.normalized_labels = normalized_labels

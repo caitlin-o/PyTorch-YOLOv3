@@ -103,22 +103,23 @@ def wrap_export_detection(img_detections, img_size, colors, classes, output_fold
 def export_detections(path_img, detections, img_size, colors, classes, output_folder):
     # Create figure
     img = plt.imread(path_img)
+    img_height, img_width = img.shape[:2]
     fig = plt.figure()
     fig.gca().imshow(img)
 
+    raw_detect = []
     # Draw bounding boxes and labels of detections
     if detections is not None:
         # Rescale boxes to original image
         detections = rescale_boxes(detections, img_size, img.shape[:2])
         for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
             # print("\t+ Label: %s, Conf: %.5f" % (classes[int(cls_pred)], cls_conf.item()))
-
-            box_w = x2 - x1
-            box_h = y2 - y1
+            box_width = float(x2 - x1)
+            box_height = float(y2 - y1)
 
             color = colors[int(cls_pred)]
             # Create a Rectangle patch
-            bbox = patches.Rectangle((x1, y1), box_w, box_h, linewidth=2, edgecolor=color, facecolor="none")
+            bbox = patches.Rectangle((x1, y1), box_width, box_height, linewidth=2, edgecolor=color, facecolor="none")
             # Add the bbox to the plot
             fig.gca().add_patch(bbox)
             # Add label
@@ -126,6 +127,18 @@ def export_detections(path_img, detections, img_size, colors, classes, output_fo
                             bbox={"color": color, "pad": 0, "alpha": 0.5})
             fig.gca().text(x1, y1, s=classes[int(cls_pred)], **text_fmt)
             fig.gca().text(x2 - 40, y1, s=str(np.round(conf.numpy(), 2)), **text_fmt)
+
+            box_centre_x = float((x2 + x1) / 2)
+            box_centre_y = float((y2 + y1) / 2)
+            bbox = [int(cls_pred),
+                    np.round(box_centre_x / img_width, 5), np.round(box_centre_y / img_height, 5),
+                    np.round(box_width / img_width, 5), np.round(box_height / img_height, 5)]
+            raw_detect.append(bbox)
+
+    # export detection in the COCO format (the same as training)
+    img_name, _ = os.path.splitext(os.path.basename(path_img))
+    with open(os.path.join(output_folder, img_name + '.txt'), 'w') as fp:
+        fp.write(os.linesep.join([' '.join(map(str, det)) for det in raw_detect]))
 
     # Save generated image with detections
     fig.gca().axis('off')

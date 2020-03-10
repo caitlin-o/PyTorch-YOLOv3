@@ -10,8 +10,8 @@ mkdir images
 cd images
 
 # Download Images
-wget -c https://pjreddie.com/media/files/train2014.zip
-wget -c https://pjreddie.com/media/files/val2014.zip
+wget -c http://images.cocodataset.org/zips/train2014.zip
+wget -c http://images.cocodataset.org/zips/val2014.zip
 
 # Unzip
 unzip -q train2014.zip
@@ -26,6 +26,9 @@ wget -c https://pjreddie.com/media/files/coco/trainvalno5k.part
 wget -c https://pjreddie.com/media/files/coco/labels.tgz
 tar xzf labels.tgz
 unzip -q instances_train-val2014.zip
+
+ls $PWD/train2014/*.jpg > train2014.txt
+ls $PWD/val2014/*.jpg > val2014.txt
 
 # Set Up Image Lists
 paste <(awk "{print \"$PWD\"}" <5k.part) 5k.part | tr -d '\t' > 5k.txt

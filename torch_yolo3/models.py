@@ -91,6 +91,7 @@ class Upsample(nn.Module):
         x = F.interpolate(x, scale_factor=self.scale_factor, mode=self.mode)
         return x
 
+
 class YOLOLayer(nn.Module):
     """Detection layer"""
 
