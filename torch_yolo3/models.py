@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .evaluate import bbox_iou, bbox_wh_iou
-from .utils import to_cpu, parse_model_config
+from torch_yolo3.evaluate import bbox_iou, bbox_wh_iou
+from torch_yolo3.utils import to_cpu, parse_model_config
 
 
 def create_modules(module_defs):

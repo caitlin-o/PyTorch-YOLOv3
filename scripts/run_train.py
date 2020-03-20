@@ -10,7 +10,10 @@ python run_train.py \
     --model_def ./config/yolov3.cfg \
     --path_output ./outputs \
     --data_config ./config/custom.data \
-    --img_size 416
+    --img_size 416 \
+    --multiscale 0.1 \
+    --augment hflip
+
 
 """
 
@@ -42,7 +45,7 @@ METRICS = [
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def main(data_config, model_def, trained_weights, multiscale,
+def main(data_config, model_def, trained_weights, augment, multiscale,
          img_size, grad_accums, evaluation_interval, checkpoint_interval,
          batch_size, epochs, path_output, nb_cpu):
     logger = Logger(os.path.join(path_output, "logs"))
@@ -66,8 +69,10 @@ def main(data_config, model_def, trained_weights, multiscale,
         else:
             model.load_darknet_weights(trained_weights)
 
+    augment = dict(zip(augment, [True] * len(augment))) if augment else {}
+    augment["scaling"] = multiscale
     # Get dataloader
-    dataset = ListDataset(train_path, augment=True, multiscale=multiscale, img_size=img_size)
+    dataset = ListDataset(train_path, augment=augment, img_size=img_size)
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -162,7 +167,7 @@ def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, 
     for i, c in enumerate(ap_class):
         ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
     print(AsciiTable(ap_table).table)
-    print(f"---- mAP {AP.mean()}")
+    print(f"e:{epoch}---- mAP {AP.mean()}")
     return AP.mean()
 
 
@@ -198,12 +203,14 @@ def run_cli():
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
-    parser.add_argument("--multiscale", default=True, help="allow for multi-scale training")
+    parser.add_argument("--augment", type=str, default=None, nargs="*", help="allow for augmentation",
+                        choices=['hflip', 'vflip'])
+    parser.add_argument("--multiscale", type=float, default=0.1, help="allow for multi-scale training")
     opt = parser.parse_args()
     print(opt)
 
     main(data_config=opt.data_config, model_def=opt.model_def, trained_weights=opt.trained_weights,
-         multiscale=opt.multiscale, img_size=opt.img_size, grad_accums=opt.grad_accums,
+         augment=opt.augment, multiscale=opt.multiscale, img_size=opt.img_size, grad_accums=opt.grad_accums,
          evaluation_interval=opt.evaluation_interval, checkpoint_interval=opt.checkpoint_interval,
          batch_size=opt.batch_size, epochs=opt.epochs, path_output=opt.path_output, nb_cpu=opt.nb_cpu)
     print("Done :]")

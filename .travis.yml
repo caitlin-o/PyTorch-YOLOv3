@@ -27,8 +27,8 @@ script:
   # testing
   - tox --sitepackages
   # installation
-  - pip install "pillow<7.0.0"  # this is temporal fix for some prd-party package issues
-  - pip install -r requirements.txt
+  #- pip install "pillow<7.0.0"  # this is temporal fix for some prd-party package issues
+  #- pip install -r requirements.txt
   - pip install -e .
   # execution
   #- python scripts/run_detect.py --image_folder ./data/samples --model_def ./config/yolov3-tiny.cfg --weights_path ./weights/yolov3-tiny.weights --class_path ./data/coco.names --output_folder ./outputs

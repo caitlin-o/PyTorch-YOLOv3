@@ -10,8 +10,8 @@ import torchvision.transforms as transforms
 from PIL import Image
 from torch.utils.data import Dataset
 
-from .augmentations import horisontal_flip
-from .utils import update_path
+from torch_yolo3.augment import horisontal_flip, vertical_flip
+from torch_yolo3.utils import update_path
 
 
 def pad_to_square(img, pad_value):
@@ -88,7 +88,15 @@ class ListDataset(Dataset):
     >>> data.collate_fn(batch)  # doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
     (('.../images/coach.jpg', '.../images/coach.jpg'), tensor(...), tensor([[...], [...]]))
     """
-    def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True, max_objects=100):
+    def __init__(self, list_path, img_size=416, augment=None, normalized_labels=True, max_objects=100):
+        """Dataset defined by list of images/annot
+
+        :param list list_path:
+        :param int img_size:
+        :param dict augment: options like {'scaling': 0.1, 'vflip': None, 'hflip': None}
+        :param bool normalized_labels:
+        :param int max_objects:
+        """
         with open(list_path, "r") as file:
             img_files = [update_path(fn.strip()) for fn in file.readlines()]
 
@@ -106,14 +114,15 @@ class ListDataset(Dataset):
         self.img_files, self.label_files = list(zip(*path_img_lbs))
         logging.info("From %i listed found %i annotation", len(path_img_lbs), len(self.label_files))
 
+        self.augment = augment if augment else {}
         self.img_size = img_size
         self.max_objects = max_objects
-        self.augment = augment
-        self.multiscale = multiscale
         self.normalized_labels = normalized_labels
-        self.min_size = self.img_size - 3 * 32
-        self.max_size = self.img_size + 3 * 32
         self.batch_count = 0
+
+        scaling = self.augment.get('scaling', 0.)
+        self.min_size = round(self.img_size * (1. - scaling) / 32) * 32
+        self.max_size = round(self.img_size * (1. + scaling) / 32) * 32
 
     def __getitem__(self, idx):
         # ---------
@@ -166,9 +175,10 @@ class ListDataset(Dataset):
             targets[:, 1:] = boxes
 
         # Apply augmentations
-        if self.augment:
-            if np.random.random() < 0.5:
-                img, targets = horisontal_flip(img, targets)
+        if self.augment.get('hflip', False) and np.random.random() < 0.5:
+            img, targets = horisontal_flip(img, targets)
+        if self.augment.get('vflip', False) and np.random.random() < 0.5:
+            img, targets = vertical_flip(img, targets)
 
         return img_path, img, targets
 
@@ -181,10 +191,9 @@ class ListDataset(Dataset):
             boxes[:, 0] = i
         targets = torch.cat(targets, 0)
         # Selects new image size every tenth batch
-        if self.multiscale and self.batch_count % 10 == 0:
-            self.img_size = random.choice(range(self.min_size, self.max_size + 1, 32))
+        img_size = random.choice(range(self.min_size, self.max_size + 1, 32))
         # Resize images to input shape
-        imgs = torch.stack([resize(img, self.img_size) for img in imgs])
+        imgs = torch.stack([resize(img, img_size) for img in imgs])
         self.batch_count += 1
         return paths, imgs, targets
 

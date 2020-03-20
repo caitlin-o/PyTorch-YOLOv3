@@ -13,7 +13,7 @@ def evaluate_model(model, path_data, iou_thres, conf_thres, nms_thres, img_size,
     model.eval()
 
     # Get dataloader
-    dataset = ListDataset(path_data, img_size=img_size, augment=False, multiscale=False)
+    dataset = ListDataset(path_data, img_size=img_size, augment=None)
     dataloader = torch.utils.data.DataLoader(
         dataset, batch_size=batch_size, shuffle=False, num_workers=nb_cpu, collate_fn=dataset.collate_fn
     )
