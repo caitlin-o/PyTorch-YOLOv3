@@ -22,7 +22,7 @@ coverage:
     patch:
       default:
         against: auto
-        target: 40% # specify the target "X%" coverage to hit
+        target: 25% # specify the target "X%" coverage to hit
         # threshold: 50% # allow this much decrease on patch
     changes: false
 

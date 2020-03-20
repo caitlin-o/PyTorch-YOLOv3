@@ -102,6 +102,7 @@ class ListDataset(Dataset):
         # filter existing image and annotation
         path_img_lbs = [(p_img, p_lbs) for p_img, p_lbs in zip(img_files, label_files)
                         if os.path.isfile(p_img) and os.path.isfile(p_lbs)]
+        assert path_img_lbs, 'missing images/annotations'
         self.img_files, self.label_files = list(zip(*path_img_lbs))
         logging.info("From %i listed found %i annotation", len(path_img_lbs), len(self.label_files))
 
@@ -115,7 +116,6 @@ class ListDataset(Dataset):
         self.batch_count = 0
 
     def __getitem__(self, idx):
-
         # ---------
         #  Image
         # ---------
@@ -140,7 +140,6 @@ class ListDataset(Dataset):
         # ---------
         #  Label
         # ---------
-
         label_path = self.label_files[idx].rstrip()
         label_path = update_path(label_path)
 

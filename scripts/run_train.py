@@ -1,19 +1,36 @@
+"""
+Train a custom model
+
+Example
+-------
+
+python run_train.py \
+    --epochs 10 \
+    --batch_size 2 \
+    --model_def ./config/yolov3.cfg \
+    --path_output ./outputs \
+    --data_config ./config/custom.data \
+    --img_size 416
+
+"""
+
 from __future__ import division
 
 import argparse
+import logging
 import os
 
 import tqdm
 import torch
 from terminaltables import AsciiTable
 from torch.autograd import Variable
+from torch.utils.data import DataLoader
 
-from torch_yolo3.models import Darknet
+from torch_yolo3.models import Darknet, weights_init_normal
 from torch_yolo3.datasets import ListDataset
 from torch_yolo3.logger import Logger
-from torch_yolo3.parse_config import parse_data_config
-from torch_yolo3.utils import load_classes, weights_init_normal, update_path
-from scripts.eval import evaluate
+from torch_yolo3.utils import NB_CPUS, load_classes, update_path, parse_data_config
+from torch_yolo3.evaluate import evaluate_model
 
 METRICS = [
     "grid_size", "loss",
@@ -25,10 +42,10 @@ METRICS = [
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def main(data_config, model_def, trained_weights, multiscale_training,
+def main(data_config, model_def, trained_weights, multiscale,
          img_size, grad_accums, evaluation_interval, checkpoint_interval,
          batch_size, epochs, path_output, nb_cpu):
-    logger = Logger("logs")
+    logger = Logger(os.path.join(path_output, "logs"))
 
     os.makedirs(path_output, exist_ok=True)
 
@@ -50,8 +67,8 @@ def main(data_config, model_def, trained_weights, multiscale_training,
             model.load_darknet_weights(trained_weights)
 
     # Get dataloader
-    dataset = ListDataset(train_path, augment=True, multiscale=multiscale_training, img_size=img_size)
-    dataloader = torch.utils.data.DataLoader(
+    dataset = ListDataset(train_path, augment=True, multiscale=multiscale, img_size=img_size)
+    dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
@@ -62,15 +79,17 @@ def main(data_config, model_def, trained_weights, multiscale_training,
 
     optimizer = torch.optim.Adam(model.parameters())
 
-    for epoch in range(epochs):
+    for epoch in tqdm.tqdm(range(epochs), desc='Training epoch'):
         model.train()
         # start_time = time.time()
-        pbar = tqdm.tqdm(total=len(dataloader))
+        pbar_batch = tqdm.tqdm(total=len(dataloader))
         for batch_i, (_, imgs, targets) in enumerate(dataloader):
             model, loss = training_batch(dataloader, model, optimizer, epochs,
                                          epoch, batch_i, imgs, targets, grad_accums, logger)
-            pbar.set_description("training batch loss=%.5f" % loss.item())
-            pbar.update()
+            pbar_batch.set_description("training batch loss=%.5f" % loss.item())
+            pbar_batch.update()
+        pbar_batch.close()
+        pbar_batch.clear()
 
         if epoch % evaluation_interval == 0:
             evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger)
@@ -120,9 +139,9 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
 def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger):
     print("\n---- Evaluating Model ----")
     # Evaluate the model on the validation set
-    precision, recall, AP, f1, ap_class = evaluate(
+    precision, recall, AP, f1, ap_class = evaluate_model(
         model,
-        path=valid_path,
+        path_data=valid_path,
         iou_thres=0.5,
         conf_thres=0.5,
         nms_thres=0.5,
@@ -143,6 +162,7 @@ def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, 
         ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
     print(AsciiTable(ap_table).table)
     print(f"---- mAP {AP.mean()}")
+    return AP.mean()
 
 
 def metrics_export(metric_table, model, loss, metric):
@@ -163,24 +183,28 @@ def metrics_export(metric_table, model, loss, metric):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="size of each image batch")
-    parser.add_argument("--grad_accums", type=int, default=2, help="number of gradient accumulations before step")
+    parser.add_argument("--grad_accums", type=int, default=8, help="number of gradient accumulations before step")
     parser.add_argument("--model_def", type=str, default="config/yolov3.cfg", help="path to model definition file")
     parser.add_argument("--path_output", type=str, default="output", help="path to output folder")
     parser.add_argument("--data_config", type=str, default="config/coco.data", help="path_img to data config file")
     parser.add_argument("--trained_weights", type=str, help="if specified starts from checkpoint model")
-    parser.add_argument("--nb_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
+    parser.add_argument("--nb_cpu", type=int, default=NB_CPUS,
+                        help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
-    parser.add_argument("--multiscale_training", default=True, help="allow for multi-scale training")
+    parser.add_argument("--multiscale", default=True, help="allow for multi-scale training")
     opt = parser.parse_args()
     print(opt)
 
     main(data_config=opt.data_config, model_def=opt.model_def, trained_weights=opt.trained_weights,
-         multiscale_training=opt.multiscale_training, img_size=opt.img_size, grad_accums=opt.grad_accums,
+         multiscale=opt.multiscale, img_size=opt.img_size, grad_accums=opt.grad_accums,
          evaluation_interval=opt.evaluation_interval, checkpoint_interval=opt.checkpoint_interval,
          batch_size=opt.batch_size, epochs=opt.epochs, path_output=opt.path_output, nb_cpu=opt.nb_cpu)
+
+    print("Done :]")

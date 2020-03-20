@@ -2,7 +2,7 @@
 
 Example
 -------
-python3 scripts/detect.py \
+python3 run_detect.py \
     --image_folder ./data_images \
     --model_def ./config/yolov3.cfg \
     --weights_path ./weights/yolov3.weights \
@@ -16,6 +16,7 @@ python3 scripts/detect.py \
 from __future__ import division
 
 import argparse
+import logging
 import os
 from functools import partial
 
@@ -32,7 +33,8 @@ from torch.utils.data import DataLoader
 # sys.path += [os.path.abspath('..'), os.path.abspath('.')]
 from torch_yolo3.models import Darknet
 from torch_yolo3.datasets import ImageFolder
-from torch_yolo3.utils import load_classes, non_max_suppression, rescale_boxes
+from torch_yolo3.utils import NB_CPUS, load_classes, rescale_boxes
+from torch_yolo3.evaluate import non_max_suppression
 
 
 def main(image_folder, model_def, weights_path, class_path, output_folder, img_size,
@@ -150,6 +152,7 @@ def export_detections(path_img, detections, img_size, colors, classes, output_fo
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_folder", type=str, default="data/samples", help="path_img to dataset")
     parser.add_argument("--output_folder", type=str, default="output", help="path_img to output")
@@ -159,7 +162,8 @@ if __name__ == "__main__":
     parser.add_argument("--conf_thres", type=float, default=0.8, help="object confidence threshold")
     parser.add_argument("--nms_thres", type=float, default=0.4, help="iou threshold for non-maximum suppression")
     parser.add_argument("--batch_size", type=int, default=1, help="size of the batches")
-    parser.add_argument("--nb_cpu", type=int, default=1, help="number of cpu threads to use during batch generation")
+    parser.add_argument("--nb_cpu", type=int, default=NB_CPUS,
+                        help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=608, help="size of each image dimension")
     parser.add_argument("--checkpoint_model", type=str, help="path_img to checkpoint model")
     opt = parser.parse_args()

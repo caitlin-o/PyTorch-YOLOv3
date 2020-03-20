@@ -1,12 +1,12 @@
-
 .DS_Store
 build
 .git
 *.egg-info
 dist
-output
+output/
+outputs/
 data/coco
-backup
+backup/
 weights/*.weights
 __pycache__
 checkpoints
