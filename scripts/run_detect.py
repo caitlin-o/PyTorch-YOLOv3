@@ -151,8 +151,7 @@ def export_detections(path_img, detections, img_size, colors, classes, output_fo
     plt.close(fig)
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+def run_cli():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image_folder", type=str, default="data/samples", help="path_img to dataset")
     parser.add_argument("--output_folder", type=str, default="output", help="path_img to output")
@@ -173,3 +172,9 @@ if __name__ == "__main__":
          class_path=opt.class_path, output_folder=opt.output_folder, img_size=opt.img_size,
          conf_thres=opt.conf_thres, nms_thres=opt.nms_thres,
          batch_size=opt.batch_size, nb_cpu=opt.nb_cpu)
+    print("Done :]")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_cli()

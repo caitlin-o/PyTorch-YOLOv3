@@ -37,6 +37,7 @@ def main(data_config, model_def, weights_path, batch_size,
         nms_thres=nms_thres,
         img_size=img_size,
         batch_size=batch_size,
+        nb_cpu=nb_cpu,
     )
 
     print("Average Precisions:")

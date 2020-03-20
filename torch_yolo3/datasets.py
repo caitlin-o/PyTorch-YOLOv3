@@ -90,7 +90,7 @@ class ListDataset(Dataset):
     """
     def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True, max_objects=100):
         with open(list_path, "r") as file:
-            img_files = [fn.strip() for fn in file.readlines()]
+            img_files = [update_path(fn.strip()) for fn in file.readlines()]
 
         # get the labels for each image if image exista
         label_files = [

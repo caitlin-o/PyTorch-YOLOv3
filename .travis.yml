@@ -22,13 +22,17 @@ install:
   - pip list
 
 script:
+  # preparation
+  - wget -c https://pjreddie.com/media/files/yolov3-tiny.weights -P ./weights --progress=bar:force:noscroll
+  # testing
   - tox --sitepackages
+  # installation
   - pip install "pillow<7.0.0"  # this is temporal fix for some prd-party package issues
   - pip install -r requirements.txt
   - pip install -e .
-  - wget -c https://pjreddie.com/media/files/yolov3-tiny.weights -P ./weights --progress=bar:force:noscroll
-  - python scripts/run_detect.py --image_folder ./data/samples --model_def ./config/yolov3-tiny.cfg --weights_path ./weights/yolov3-tiny.weights --class_path ./data/coco.names --output_folder ./outputs
-  - python scripts/run_train.py --epochs 2 --batch_size 1 --model_def ./config/yolov3.cfg --path_output ./outputs --data_config ./config/custom.data --img_size 416
+  # execution
+  #- python scripts/run_detect.py --image_folder ./data/samples --model_def ./config/yolov3-tiny.cfg --weights_path ./weights/yolov3-tiny.weights --class_path ./data/coco.names --output_folder ./outputs
+  #- python scripts/run_train.py --epochs 2 --batch_size 1 --model_def ./config/yolov3-tiny.cfg --path_output ./outputs --data_config ./config/custom.data --img_size 416
 
 after_success: codecov
 

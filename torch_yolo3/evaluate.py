@@ -9,13 +9,13 @@ from torch_yolo3.datasets import ListDataset
 from torch_yolo3.utils import xywh2xyxy
 
 
-def evaluate_model(model, path_data, iou_thres, conf_thres, nms_thres, img_size, batch_size):
+def evaluate_model(model, path_data, iou_thres, conf_thres, nms_thres, img_size, batch_size, nb_cpu):
     model.eval()
 
     # Get dataloader
     dataset = ListDataset(path_data, img_size=img_size, augment=False, multiscale=False)
     dataloader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, num_workers=1, collate_fn=dataset.collate_fn
+        dataset, batch_size=batch_size, shuffle=False, num_workers=nb_cpu, collate_fn=dataset.collate_fn
     )
 
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor

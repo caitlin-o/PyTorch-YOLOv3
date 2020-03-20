@@ -92,7 +92,7 @@ def main(data_config, model_def, trained_weights, multiscale,
         pbar_batch.clear()
 
         if epoch % evaluation_interval == 0:
-            evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger)
+            evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger, nb_cpu)
 
         if epoch % checkpoint_interval == 0:
             torch.save(model.state_dict(), os.path.join(path_output, "yolov3_ckpt_%05d.pth" % epoch))
@@ -136,7 +136,7 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
     return model, loss
 
 
-def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger):
+def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger, nb_cpu):
     print("\n---- Evaluating Model ----")
     # Evaluate the model on the validation set
     precision, recall, AP, f1, ap_class = evaluate_model(
@@ -147,6 +147,7 @@ def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, 
         nms_thres=0.5,
         img_size=img_size,
         batch_size=batch_size,
+        nb_cpu=nb_cpu,
     )
     evaluation_metrics = [
         ("val_precision", precision.mean()),
@@ -182,8 +183,7 @@ def metrics_export(metric_table, model, loss, metric):
     return metric_table, tensorboard_log
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+def run_cli():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--batch_size", type=int, default=8, help="size of each image batch")
@@ -206,5 +206,9 @@ if __name__ == "__main__":
          multiscale=opt.multiscale, img_size=opt.img_size, grad_accums=opt.grad_accums,
          evaluation_interval=opt.evaluation_interval, checkpoint_interval=opt.checkpoint_interval,
          batch_size=opt.batch_size, epochs=opt.epochs, path_output=opt.path_output, nb_cpu=opt.nb_cpu)
-
     print("Done :]")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_cli()
