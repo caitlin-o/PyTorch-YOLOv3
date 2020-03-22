@@ -167,7 +167,7 @@ def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, 
     for i, c in enumerate(ap_class):
         ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
     print(AsciiTable(ap_table).table)
-    print(f"e:{epoch}---- mAP {AP.mean()}")
+    print(f"#{epoch} >>>> mAP: {AP.mean()}")
     return AP.mean()
 
 

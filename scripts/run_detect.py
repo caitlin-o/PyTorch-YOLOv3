@@ -20,20 +20,20 @@ import logging
 import os
 from functools import partial
 
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import tqdm
-from matplotlib.ticker import NullLocator
+from PIL import Image
+
 from pathos.multiprocessing import ProcessPool
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
 # sys.path += [os.path.abspath('..'), os.path.abspath('.')]
+from torch_yolo3.visual import draw_bboxes, export_img_figure, create_img_figure, get_colors
 from torch_yolo3.models import Darknet
 from torch_yolo3.datasets import ImageFolder
-from torch_yolo3.utils import NB_CPUS, load_classes, rescale_boxes
+from torch_yolo3.utils import NB_CPUS, load_classes
 from torch_yolo3.evaluate import non_max_suppression
 
 
@@ -85,8 +85,7 @@ def main(image_folder, model_def, weights_path, class_path, output_folder, img_s
     pbar.close()
 
     # Bounding-box colors
-    cmap = plt.get_cmap("jet")
-    colors = [cmap(i) for i in np.linspace(0, 1, len(classes))]
+    colors = get_colors(len(classes), "jet")
     # np.random.shuffle(colors)
 
     _wrap_export = partial(wrap_export_detection, img_size=img_size, colors=colors,
@@ -94,7 +93,7 @@ def main(image_folder, model_def, weights_path, class_path, output_folder, img_s
     with ProcessPool(nb_cpu) as pool:
         # Iterate through images and save plot of detections
         list(tqdm.tqdm(pool.imap(_wrap_export, zip(img_paths, img_detections)),
-                       desc='Saving images'))
+                       desc='Saving images/detections'))
 
 
 def wrap_export_detection(img_detections, img_size, colors, classes, output_folder):
@@ -103,52 +102,20 @@ def wrap_export_detection(img_detections, img_size, colors, classes, output_fold
 
 
 def export_detections(path_img, detections, img_size, colors, classes, output_folder):
+    img_name, _ = os.path.splitext(os.path.basename(path_img))
     # Create figure
-    img = plt.imread(path_img)
-    img_height, img_width = img.shape[:2]
-    fig = plt.figure()
-    fig.gca().imshow(img)
+    img = np.array(Image.open(path_img))
+    fig = create_img_figure(img)
 
-    raw_detect = []
     # Draw bounding boxes and labels of detections
     if detections is not None:
-        # Rescale boxes to original image
-        detections = rescale_boxes(detections, img_size, img.shape[:2])
-        for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
-            # print("\t+ Label: %s, Conf: %.5f" % (classes[int(cls_pred)], cls_conf.item()))
-            box_width = float(x2 - x1)
-            box_height = float(y2 - y1)
+        fig, raw_detect = draw_bboxes(fig, detections, img, img_size, colors, classes)
 
-            color = colors[int(cls_pred)]
-            # Create a Rectangle patch
-            bbox = patches.Rectangle((x1, y1), box_width, box_height, linewidth=2, edgecolor=color, facecolor="none")
-            # Add the bbox to the plot
-            fig.gca().add_patch(bbox)
-            # Add label
-            text_fmt = dict(color="white", fontsize=8, verticalalignment="top",
-                            bbox={"color": color, "pad": 0, "alpha": 0.5})
-            fig.gca().text(x1, y1, s=classes[int(cls_pred)], **text_fmt)
-            fig.gca().text(x2 - 40, y1, s=str(np.round(conf.numpy(), 2)), **text_fmt)
+        # export detection in the COCO format (the same as training)
+        with open(os.path.join(output_folder, img_name + '.txt'), 'w') as fp:
+            fp.write(os.linesep.join([' '.join(map(str, det)) for det in raw_detect]))
 
-            box_centre_x = float((x2 + x1) / 2)
-            box_centre_y = float((y2 + y1) / 2)
-            bbox = [int(cls_pred),
-                    np.round(box_centre_x / img_width, 5), np.round(box_centre_y / img_height, 5),
-                    np.round(box_width / img_width, 5), np.round(box_height / img_height, 5)]
-            raw_detect.append(bbox)
-
-    # export detection in the COCO format (the same as training)
-    img_name, _ = os.path.splitext(os.path.basename(path_img))
-    with open(os.path.join(output_folder, img_name + '.txt'), 'w') as fp:
-        fp.write(os.linesep.join([' '.join(map(str, det)) for det in raw_detect]))
-
-    # Save generated image with detections
-    fig.gca().axis('off')
-    fig.gca().xaxis.set_major_locator(NullLocator())
-    fig.gca().yaxis.set_major_locator(NullLocator())
-    filename, _ = os.path.splitext(os.path.basename(path_img))
-    fig.savefig(os.path.join(output_folder, f"{filename}.jpg"), bbox_inches="tight", pad_inches=0.0)
-    plt.close(fig)
+    export_img_figure(fig, output_folder, img_name)
 
 
 def run_cli():
@@ -164,7 +131,6 @@ def run_cli():
     parser.add_argument("--nb_cpu", type=int, default=NB_CPUS,
                         help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=608, help="size of each image dimension")
-    parser.add_argument("--checkpoint_model", type=str, help="path_img to checkpoint model")
     opt = parser.parse_args()
     print(opt)
 
