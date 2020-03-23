@@ -24,34 +24,31 @@ def evaluate_model(model, path_data, iou_thres, conf_thres, nms_thres, img_size,
     sample_metrics = []  # List of tuples (TP, confs, pred)
     pbar = tqdm.tqdm(total=len(dataloader), desc="Detecting objects")
     for batch_i, (_, imgs, targets) in enumerate(dataloader):
+
+        with torch.no_grad():
+            loss, outputs = model(Variable(imgs.type(Tensor), requires_grad=False),
+                                  Variable(targets.type(Tensor), requires_grad=False))
+            outputs = non_max_suppression(outputs, conf_thres=conf_thres, nms_thres=nms_thres)
+
         # Extract labels
         labels += targets[:, 1].tolist()
         # Rescale target
-        targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-        targets[:, 2:] *= img_size
-
-        imgs = Variable(imgs.type(Tensor), requires_grad=False)
-
-        with torch.no_grad():
-            outputs = model(imgs)
-            outputs = non_max_suppression(outputs, conf_thres=conf_thres, nms_thres=nms_thres)
-
+        targets[:, 2:] = xywh2xyxy(targets[:, 2:]) * img_size
         sample_metrics += get_batch_statistics(outputs, targets, iou_threshold=iou_thres)
         pbar.update()
     pbar.close()
     pbar.clear()
 
     # Concatenate sample statistics
-    if len(sample_metrics) == 0:
-        true_positives, pred_scores, pred_labels = np.array([]), np.array([]), np.array([])
-    else:
-        true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))]
-    precision, recall, AP, f1, ap_class = ap_per_class(true_positives, pred_scores, pred_labels, labels)
+    true_positives, pred_scores, pred_labels = \
+        [np.concatenate(x, 0) for x in list(zip(*sample_metrics))] \
+        if sample_metrics else [np.array([])] * 3
+    precision, recall, AP, f1, ap_class = agreg_stat_per_class(true_positives, pred_scores, pred_labels, labels)
 
-    return precision, recall, AP, f1, ap_class
+    return loss.cpu(), precision, recall, AP, f1, ap_class
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls):
+def agreg_stat_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
 
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
@@ -75,7 +72,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
 
     # Create Precision-Recall curve and compute AP for each class
     avg_prec, prec, recall = [], [], []
-    for cls_idx in tqdm.tqdm(unique_classes, desc="Computing AP"):
+    for cls_idx in unique_classes:
         mask_cls = pred_cls == cls_idx
         nb_gt = (target_cls == cls_idx).sum()  # Number of ground truth objects
         nb_pred = mask_cls.sum()  # Number of predicted objects
@@ -144,19 +141,18 @@ def compute_ap(recall, precision):
 def get_batch_statistics(outputs, targets, iou_threshold):
     """ Compute true positives, predicted scores and predicted labels per sample """
     batch_metrics = []
-    for sample_i in range(len(outputs)):
+    for spl_i, output in enumerate(outputs):
 
-        if outputs[sample_i] is None:
+        if output is None:
             continue
 
-        output = outputs[sample_i]
         pred_boxes = output[:, :4]
         pred_scores = output[:, 4]
         pred_labels = output[:, -1]
 
         true_positives = np.zeros(pred_boxes.shape[0])
 
-        annotations = targets[targets[:, 0] == sample_i][:, 1:]
+        annotations = targets[targets[:, 0] == spl_i][:, 1:]
         target_labels = annotations[:, 0] if len(annotations) else []
         if len(annotations) == 0:
             batch_metrics.append([true_positives, pred_scores, pred_labels])

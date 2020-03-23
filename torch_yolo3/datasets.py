@@ -106,13 +106,13 @@ class ListDataset(Dataset):
                          os.path.splitext(os.path.basename(imp))[0] + ".txt")
             for imp in img_files if os.path.isfile(imp)
         ]
-        logging.info("From %i listed, found %i images", len(img_files), len(label_files))
+        logging.debug("From %i listed, found %i images", len(img_files), len(label_files))
         # filter existing image and annotation
         path_img_lbs = [(p_img, p_lbs) for p_img, p_lbs in zip(img_files, label_files)
                         if os.path.isfile(p_img) and os.path.isfile(p_lbs)]
         assert path_img_lbs, 'missing images/annotations'
         self.img_files, self.label_files = list(zip(*path_img_lbs))
-        logging.info("From %i listed found %i annotation", len(path_img_lbs), len(self.label_files))
+        logging.debug("From %i listed found %i annotation", len(path_img_lbs), len(self.label_files))
 
         self.augment = augment if augment else {}
         self.img_size = img_size

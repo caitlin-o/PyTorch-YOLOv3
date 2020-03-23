@@ -7,7 +7,7 @@ Example
 python run_train.py \
     --epochs 10 \
     --batch_size 2 \
-    --model_def ./config/yolov3.cfg \
+    --model_def ./config/yolov3-tiny.cfg \
     --path_output ./outputs \
     --data_config ./config/custom.data \
     --img_size 416 \
@@ -23,6 +23,7 @@ import argparse
 import logging
 import os
 
+import numpy as np
 import tqdm
 import torch
 from terminaltables import AsciiTable
@@ -32,8 +33,8 @@ from torch.utils.data import DataLoader
 from torch_yolo3.models import Darknet, weights_init_normal
 from torch_yolo3.datasets import ListDataset
 from torch_yolo3.logger import Logger
-from torch_yolo3.utils import NB_CPUS, load_classes, update_path, parse_data_config
-from torch_yolo3.evaluate import evaluate_model
+from torch_yolo3.utils import NB_CPUS, load_classes, update_path, parse_data_config, xywh2xyxy
+from torch_yolo3.evaluate import evaluate_model, non_max_suppression, get_batch_statistics, agreg_stat_per_class
 
 METRICS = [
     "grid_size", "loss",
@@ -42,15 +43,19 @@ METRICS = [
     "recall50", "recall75", "precision",
     "conf", "conf_obj", "conf_noobj",
 ]
+IOU_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.5
+NMS_THRESHOLD = 0.5
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main(data_config, model_def, trained_weights, augment, multiscale,
          img_size, grad_accums, evaluation_interval, checkpoint_interval,
          batch_size, epochs, path_output, nb_cpu):
-    logger = Logger(os.path.join(path_output, "logs"))
-
+    path_output = update_path(path_output)
     os.makedirs(path_output, exist_ok=True)
+
+    logger = Logger(os.path.join(path_output, "logs"))
 
     # Get data configuration
     data_config = parse_data_config(update_path(data_config))
@@ -59,11 +64,13 @@ def main(data_config, model_def, trained_weights, augment, multiscale,
     class_names = load_classes(update_path(data_config["names"]))
 
     # Initiate model
+    assert os.path.isfile(model_def)
     model = Darknet(update_path(model_def)).to(DEVICE)
     model.apply(weights_init_normal)
 
     # If specified we start from checkpoint
     if trained_weights:
+        assert os.path.isfile(trained_weights)
         if trained_weights.endswith(".pth"):
             model.load_state_dict(torch.load(trained_weights))
         else:
@@ -72,6 +79,7 @@ def main(data_config, model_def, trained_weights, augment, multiscale,
     augment = dict(zip(augment, [True] * len(augment))) if augment else {}
     augment["scaling"] = multiscale
     # Get dataloader
+    assert os.path.isfile(train_path)
     dataset = ListDataset(train_path, augment=augment, img_size=img_size)
     dataloader = DataLoader(
         dataset,
@@ -88,22 +96,32 @@ def main(data_config, model_def, trained_weights, augment, multiscale,
         model.train()
         # start_time = time.time()
         pbar_batch = tqdm.tqdm(total=len(dataloader))
+        train_metrics = []
         for batch_i, (_, imgs, targets) in enumerate(dataloader):
-            model, loss = training_batch(dataloader, model, optimizer, epochs,
-                                         epoch, batch_i, imgs, targets, grad_accums, logger)
-            pbar_batch.set_description("training batch loss=%.5f" % loss.item())
+            model, batch_metric = training_batch(dataloader, model, optimizer, epochs,
+                                                 epoch, batch_i, imgs, targets, grad_accums, logger, img_size)
+            loss = batch_metric['loss']
+            pbar_batch.set_description("training batch loss=%.5f" % loss)
+            train_metrics.append(batch_metric)
             pbar_batch.update()
         pbar_batch.close()
         pbar_batch.clear()
 
         if epoch % evaluation_interval == 0:
+            assert os.path.isfile(valid_path)
             evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger, nb_cpu)
 
         if epoch % checkpoint_interval == 0:
             torch.save(model.state_dict(), os.path.join(path_output, "yolov3_ckpt_%05d.pth" % epoch))
 
+        train_metrics_all = {m: [] for m in train_metrics[0]}
+        _ = [train_metrics_all[k].append(bm[k]) for bm in train_metrics for k in bm]
+        logger.list_scalars_summary([(k, np.mean(train_metrics_all[k]))
+                                     for k in train_metrics_all], step=epoch, phase='train')
 
-def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, targets, grad_accums, logger, verbose=0):
+
+def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, targets, grad_accums,
+                   logger, img_size, verbose=0):
     batches_done = len(dataloader) * epoch + batch_i
 
     imgs = Variable(imgs.to(DEVICE))
@@ -117,6 +135,16 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
         optimizer.step()
         optimizer.zero_grad()
 
+    labels = targets[:, 1].tolist()
+    # Rescale target
+    targets[:, 2:] = xywh2xyxy(targets[:, 2:]) * img_size
+    outputs = non_max_suppression(outputs.cpu(), conf_thres=CONF_THRESHOLD, nms_thres=NMS_THRESHOLD)
+    sample_metrics = get_batch_statistics(outputs, targets.cpu(), iou_threshold=IOU_THRESHOLD)
+    # Concatenate sample statistics
+    true_positives, pred_scores, pred_labels = [np.concatenate(x, 0) for x in list(zip(*sample_metrics))] \
+        if sample_metrics else [np.array([])] * 3
+    precision, recall, avg_prec, f1, _ = agreg_stat_per_class(true_positives, pred_scores, pred_labels, labels)
+
     if verbose:
         # Log progress
         log_str = "\n---- [Epoch %d/%d, Batch %d/%d] ----\n" % (epoch, epochs, batch_i, len(dataloader))
@@ -125,8 +153,8 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
 
         # Log metrics at each YOLO layer
         for i, metric in enumerate(METRICS):
-            metric_table, tensorboard_log = metrics_export(metric_table, model, loss, metric)
-            logger.list_of_scalars_summary(tensorboard_log, batches_done)
+            metric_table, tboard_log = metrics_export(metric_table, model, loss, metric)
+            logger.list_scalars_summary(tboard_log, batches_done)
 
         log_str += AsciiTable(metric_table).table
         log_str += f"\nTotal loss {loss.item()}"
@@ -138,37 +166,43 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
         print(log_str)
 
     model.seen += imgs.size(0)
-    return model, loss
+    eval_metrics = dict(_format_metrics(loss, precision, recall, avg_prec, f1))
+    return model, eval_metrics
+
+
+def _format_metrics(loss, precision, recall, avg_prec, f1):
+    return [
+        ("loss", loss.mean().item()),
+        ("precision", precision.mean()),
+        ("recall", recall.mean()),
+        ("mAP", avg_prec.mean()),
+        ("f1", f1.mean()),
+    ]
 
 
 def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, logger, nb_cpu):
     print("\n---- Evaluating Model ----")
     # Evaluate the model on the validation set
-    precision, recall, AP, f1, ap_class = evaluate_model(
+    loss, precision, recall, avg_prec, f1, ap_class = evaluate_model(
         model,
         path_data=valid_path,
-        iou_thres=0.5,
-        conf_thres=0.5,
-        nms_thres=0.5,
+        iou_thres=IOU_THRESHOLD,
+        conf_thres=CONF_THRESHOLD,
+        nms_thres=NMS_THRESHOLD,
         img_size=img_size,
         batch_size=batch_size,
         nb_cpu=nb_cpu,
     )
-    evaluation_metrics = [
-        ("val_precision", precision.mean()),
-        ("val_recall", recall.mean()),
-        ("val_mAP", AP.mean()),
-        ("val_f1", f1.mean()),
-    ]
-    logger.list_of_scalars_summary(evaluation_metrics, epoch)
+    eval_metrics = _format_metrics(loss, precision, recall, avg_prec, f1)
+    logger.list_scalars_summary(eval_metrics, epoch, phase='val')
 
     # Print class APs and mAP
     ap_table = [["Index", "Class name", "AP"]]
     for i, c in enumerate(ap_class):
-        ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
+        ap_table += [[c, class_names[c], "%.5f" % avg_prec[i]]]
     print(AsciiTable(ap_table).table)
-    print(f"#{epoch} >>>> mAP: {AP.mean()}")
-    return AP.mean()
+    print(f"#{epoch} >>>> mAP: {avg_prec.mean()}")
+    return avg_prec.mean()
 
 
 def metrics_export(metric_table, model, loss, metric):
@@ -179,13 +213,13 @@ def metrics_export(metric_table, model, loss, metric):
     metric_table += [[metric, *row_metrics]]
 
     # Tensorboard logging
-    tensorboard_log = []
+    tboard_log = []
     for j, yolo in enumerate(model.yolo_layers):
         for name, metric in yolo.metrics.items():
             if name != "grid_size":
-                tensorboard_log += [(f"{name}_{j + 1}", metric)]
-    tensorboard_log += [("loss", loss.item())]
-    return metric_table, tensorboard_log
+                tboard_log += [(f"{name}_{j + 1}", metric)]
+    tboard_log += [("loss", loss.item())]
+    return metric_table, tboard_log
 
 
 def run_cli():
@@ -197,15 +231,15 @@ def run_cli():
     parser.add_argument("--path_output", type=str, default="output", help="path to output folder")
     parser.add_argument("--data_config", type=str, default="config/coco.data", help="path_img to data config file")
     parser.add_argument("--trained_weights", type=str, help="if specified starts from checkpoint model")
-    parser.add_argument("--nb_cpu", type=int, default=NB_CPUS,
-                        help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
+    parser.add_argument("--multiscale", type=float, default=0.1, help="allow for multi-scale training")
     parser.add_argument("--augment", type=str, default=None, nargs="*", help="allow for augmentation",
                         choices=['hflip', 'vflip'])
-    parser.add_argument("--multiscale", type=float, default=0.1, help="allow for multi-scale training")
+    parser.add_argument("--nb_cpu", type=int, default=NB_CPUS,
+                        help="number of cpu threads to use during batch generation")
     opt = parser.parse_args()
     print(opt)
 
