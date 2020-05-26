@@ -73,6 +73,6 @@ def export_img_figure(fig, output_folder, name):
     fig.gca().xaxis.set_major_locator(NullLocator())
     fig.gca().yaxis.set_major_locator(NullLocator())
     path_fig = os.path.join(output_folder, f"{name}.jpg")
-    fig.savefig(path_fig, bbox_inches="tight", pad_inches=0.0)
+    fig.savefig(path_fig, dpi=300, bbox_inches="tight", pad_inches=0.0)
     plt.close(fig)
     return path_fig

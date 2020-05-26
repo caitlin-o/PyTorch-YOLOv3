@@ -43,9 +43,10 @@ def evaluate_model(model, path_data, iou_thres, conf_thres, nms_thres, img_size,
     true_positives, pred_scores, pred_labels = \
         [np.concatenate(x, 0) for x in list(zip(*sample_metrics))] \
         if sample_metrics else [np.array([])] * 3
-    precision, recall, AP, f1, ap_class = agreg_stat_per_class(true_positives, pred_scores, pred_labels, labels)
+    precision, recall, avg_prec, f1, ap_class = \
+        agreg_stat_per_class(true_positives, pred_scores, pred_labels, labels)
 
-    return loss.cpu(), precision, recall, AP, f1, ap_class
+    return loss.cpu(), precision, recall, avg_prec, f1, ap_class
 
 
 def agreg_stat_per_class(tp, conf, pred_cls, target_cls):
@@ -62,7 +63,6 @@ def agreg_stat_per_class(tp, conf, pred_cls, target_cls):
     Returns:
         The average precision as computed in py-faster-rcnn.
     """
-
     # Sort by objectness
     cls_idx = np.argsort(-conf)
     tp, conf, pred_cls = tp[cls_idx], conf[cls_idx], pred_cls[cls_idx]
@@ -71,7 +71,7 @@ def agreg_stat_per_class(tp, conf, pred_cls, target_cls):
     unique_classes = np.unique(target_cls)
 
     # Create Precision-Recall curve and compute AP for each class
-    avg_prec, prec, recall = [], [], []
+    avg_prec, prec, recall, classes = [], [], [], []
     for cls_idx in unique_classes:
         mask_cls = pred_cls == cls_idx
         nb_gt = (target_cls == cls_idx).sum()  # Number of ground truth objects
@@ -99,11 +99,13 @@ def agreg_stat_per_class(tp, conf, pred_cls, target_cls):
             # AP from recall-precision curve
             avg_prec.append(compute_ap(recall_curve, precision_curve))
 
+        classes.append(int(cls_idx))
+
     # Compute F1 score (harmonic mean of precision and recall)
     prec, recall, avg_prec = np.array(prec), np.array(recall), np.array(avg_prec)
     f1 = 2 * prec * recall / (prec + recall + 1e-16)
 
-    return prec, recall, avg_prec, f1, unique_classes.astype("int32")
+    return prec, recall, avg_prec, f1, classes
 
 
 def compute_ap(recall, precision):
@@ -131,10 +133,10 @@ def compute_ap(recall, precision):
 
     # to calculate area under PR curve, look for points
     # where X axis (recall) changes value
-    i = np.where(mrec[1:] != mrec[:-1])[0]
+    idx = np.where(mrec[1:] != mrec[:-1])[0]
 
     # and sum (\Delta recall) * prec
-    ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+    ap = np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1])
     return ap
 
 
@@ -180,6 +182,8 @@ def get_batch_statistics(outputs, targets, iou_threshold):
 
 
 def bbox_wh_iou(wh1, wh2):
+    if not wh2.numel():
+        return torch.tensor(0.)
     wh2 = wh2.t()
     w1, h1 = wh1[0], wh1[1]
     w2, h2 = wh2[0], wh2[1]

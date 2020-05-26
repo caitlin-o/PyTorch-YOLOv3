@@ -22,6 +22,7 @@ from __future__ import division
 import argparse
 import logging
 import os
+import sys
 
 import numpy as np
 import tqdm
@@ -30,6 +31,7 @@ from terminaltables import AsciiTable
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
+sys.path += [os.path.abspath('..'), os.path.abspath('.')]
 from torch_yolo3.models import Darknet, weights_init_normal
 from torch_yolo3.datasets import ListDataset
 from torch_yolo3.logger import Logger
@@ -99,13 +101,18 @@ def main(data_config, model_def, trained_weights, augment, multiscale,
         train_metrics = []
         for batch_i, (_, imgs, targets) in enumerate(dataloader):
             model, batch_metric = training_batch(dataloader, model, optimizer, epochs,
-                                                 epoch, batch_i, imgs, targets, grad_accums, logger, img_size)
+                                                 epoch, batch_i, imgs, targets, grad_accums, img_size)
             loss = batch_metric['loss']
             pbar_batch.set_description("training batch loss=%.5f" % loss)
             train_metrics.append(batch_metric)
             pbar_batch.update()
         pbar_batch.close()
         pbar_batch.clear()
+
+        train_metrics_all = {m: [] for m in train_metrics[0]}
+        _ = [train_metrics_all[k].append(bm[k]) for bm in train_metrics for k in bm]
+        logger.list_scalars_summary([(k, np.mean(train_metrics_all[k]))
+                                     for k in train_metrics_all], step=epoch, phase='train')
 
         if epoch % evaluation_interval == 0:
             assert os.path.isfile(valid_path)
@@ -114,21 +121,18 @@ def main(data_config, model_def, trained_weights, augment, multiscale,
         if epoch % checkpoint_interval == 0:
             torch.save(model.state_dict(), os.path.join(path_output, "yolov3_ckpt_%05d.pth" % epoch))
 
-        train_metrics_all = {m: [] for m in train_metrics[0]}
-        _ = [train_metrics_all[k].append(bm[k]) for bm in train_metrics for k in bm]
-        logger.list_scalars_summary([(k, np.mean(train_metrics_all[k]))
-                                     for k in train_metrics_all], step=epoch, phase='train')
-
 
 def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, targets, grad_accums,
-                   logger, img_size, verbose=0):
+                   img_size, verbose=0):
     batches_done = len(dataloader) * epoch + batch_i
 
     imgs = Variable(imgs.to(DEVICE))
     targets = Variable(targets.to(DEVICE), requires_grad=False)
 
     loss, outputs = model(imgs, targets)
-    loss.backward()
+    if loss:
+        # avoid 0 loss
+        loss.backward()
 
     if batches_done % grad_accums == 0:
         # Accumulates gradient before each step
@@ -154,7 +158,7 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
         # Log metrics at each YOLO layer
         for i, metric in enumerate(METRICS):
             metric_table, tboard_log = metrics_export(metric_table, model, loss, metric)
-            logger.list_scalars_summary(tboard_log, batches_done)
+            # logger.list_scalars_summary(tboard_log, batches_done)
 
         log_str += AsciiTable(metric_table).table
         log_str += f"\nTotal loss {loss.item()}"
@@ -172,7 +176,7 @@ def training_batch(dataloader, model, optimizer, epochs, epoch, batch_i, imgs, t
 
 def _format_metrics(loss, precision, recall, avg_prec, f1):
     return [
-        ("loss", loss.mean().item()),
+        ("loss", loss.mean().item() if loss else 0.),
         ("precision", precision.mean()),
         ("recall", recall.mean()),
         ("mAP", avg_prec.mean()),
@@ -193,15 +197,19 @@ def evaluate_epoch(model, valid_path, img_size, batch_size, epoch, class_names, 
         batch_size=batch_size,
         nb_cpu=nb_cpu,
     )
+
+    def _cls_name(c):
+        return class_names[c] if c < len(class_names) else 'unknown'
+
     eval_metrics = _format_metrics(loss, precision, recall, avg_prec, f1)
     logger.list_scalars_summary(eval_metrics, epoch, phase='val')
 
     # Print class APs and mAP
-    ap_table = [["Index", "Class name", "AP"]]
+    ap_table = [["Index", "Class name", "Avg. Prec.", "F1"]]
     for i, c in enumerate(ap_class):
-        ap_table += [[c, class_names[c], "%.5f" % avg_prec[i]]]
+        ap_table += [[c, _cls_name(c), "%.5f" % avg_prec[i], "%.5f" % f1[i]]]
     print(AsciiTable(ap_table).table)
-    print(f"#{epoch} >>>> mAP: {avg_prec.mean()}")
+    print(f"#{epoch} \t>>>> mAP: {avg_prec.mean()} \t>>>> mF1: {f1.mean()}")
     return avg_prec.mean()
 
 
@@ -232,7 +240,7 @@ def run_cli():
     parser.add_argument("--data_config", type=str, default="config/coco.data", help="path_img to data config file")
     parser.add_argument("--trained_weights", type=str, help="if specified starts from checkpoint model")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
-    parser.add_argument("--checkpoint_interval", type=int, default=1, help="interval between saving model weights")
+    parser.add_argument("--checkpoint_interval", type=int, default=5, help="interval between saving model weights")
     parser.add_argument("--evaluation_interval", type=int, default=1, help="interval evaluations on validation set")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
     parser.add_argument("--multiscale", type=float, default=0.1, help="allow for multi-scale training")

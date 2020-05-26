@@ -2,6 +2,7 @@ import glob
 import os
 import random
 import logging
+import warnings
 
 import numpy as np
 import torch
@@ -65,7 +66,8 @@ class ImageFolder(Dataset):
         # Resize
         img = resize(img, self.img_size)
 
-        return img_path, img
+        # in case of PNG image use only RGB not alpha
+        return img_path, img[:3, ...]
 
     def __len__(self):
         return len(self.files)
@@ -154,25 +156,13 @@ class ListDataset(Dataset):
 
         targets = None
         if os.path.exists(label_path):
-            boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5))
-            # Extract coordinates for unpadded + unscaled image
-            x1 = w_factor * (boxes[:, 1] - boxes[:, 3] / 2)
-            y1 = h_factor * (boxes[:, 2] - boxes[:, 4] / 2)
-            x2 = w_factor * (boxes[:, 1] + boxes[:, 3] / 2)
-            y2 = h_factor * (boxes[:, 2] + boxes[:, 4] / 2)
-            # Adjust for added padding
-            x1 += pad[0]
-            y1 += pad[2]
-            x2 += pad[1]
-            y2 += pad[3]
-            # Returns (x, y, w, h)
-            boxes[:, 1] = ((x1 + x2) / 2) / padded_w
-            boxes[:, 2] = ((y1 + y2) / 2) / padded_h
-            boxes[:, 3] *= w_factor / padded_w
-            boxes[:, 4] *= h_factor / padded_h
-
-            targets = torch.zeros((len(boxes), 6))
-            targets[:, 1:] = boxes
+            with warnings.catch_warnings(record=True) as w:
+                data = np.loadtxt(label_path)
+            # in case the file is empty
+            if len(data) > 0:
+                boxes = torch.from_numpy(data.reshape(-1, 5))
+                targets = ListDataset._convert_boxes_to_targets(
+                    boxes, pad, (w_factor, h_factor), (padded_w, padded_h))
 
         # Apply augmentations
         if self.augment.get('hflip', False) and np.random.random() < 0.5:
@@ -182,6 +172,30 @@ class ListDataset(Dataset):
 
         return img_path, img, targets
 
+    @staticmethod
+    def _convert_boxes_to_targets(boxes, pad, factor, padded):
+        w_factor, h_factor = factor
+        padded_w, padded_h = padded
+        # Extract coordinates for unpadded + unscaled image
+        x1 = w_factor * (boxes[:, 1] - boxes[:, 3] / 2)
+        y1 = h_factor * (boxes[:, 2] - boxes[:, 4] / 2)
+        x2 = w_factor * (boxes[:, 1] + boxes[:, 3] / 2)
+        y2 = h_factor * (boxes[:, 2] + boxes[:, 4] / 2)
+        # Adjust for added padding
+        x1 += pad[0]
+        y1 += pad[2]
+        x2 += pad[1]
+        y2 += pad[3]
+        # Returns (x, y, w, h)
+        boxes[:, 1] = ((x1 + x2) / 2) / padded_w
+        boxes[:, 2] = ((y1 + y2) / 2) / padded_h
+        boxes[:, 3] *= w_factor / padded_w
+        boxes[:, 4] *= h_factor / padded_h
+
+        targets = torch.zeros((len(boxes), 6))
+        targets[:, 1:] = boxes
+        return targets
+
     def collate_fn(self, batch):
         paths, imgs, targets = list(zip(*batch))
         # Remove empty placeholder targets
@@ -189,7 +203,7 @@ class ListDataset(Dataset):
         # Add sample index to targets
         for i, boxes in enumerate(targets):
             boxes[:, 0] = i
-        targets = torch.cat(targets, 0)
+        targets = torch.cat(targets, 0) if len(targets) > 0 else torch.tensor(np.empty([0, 6]))
         # Selects new image size every tenth batch
         img_size = random.choice(range(self.min_size, self.max_size + 1, 32))
         # Resize images to input shape

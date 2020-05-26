@@ -18,6 +18,7 @@ from __future__ import division
 import argparse
 import logging
 import os
+import sys
 from functools import partial
 
 import numpy as np
@@ -29,7 +30,7 @@ from pathos.multiprocessing import ProcessPool
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
-# sys.path += [os.path.abspath('..'), os.path.abspath('.')]
+sys.path += [os.path.abspath('..'), os.path.abspath('.')]
 from torch_yolo3.visual import draw_bboxes, export_img_figure, create_img_figure, get_colors
 from torch_yolo3.models import Darknet
 from torch_yolo3.datasets import ImageFolder
