@@ -34,7 +34,7 @@ setup(
     author='Erik Linder-Noren',  # Optional
     author_email='eriklindernoren@gmail.com',  # Optional
     long_description=long_description,  # Optional (see note above)
-    # long_description_content_type='text/markdown',  # Optional (see note above)
+    long_description_content_type='text/markdown',  # Optional (see note above)
     url='https://github.com/Borda/PyTorch-YOLOv3',  # Optional
     install_requires=install_reqs,  # Optional
     classifiers=[  # Optional
@@ -52,6 +52,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
     ],
-    keywords='Yolo CNN object-detector',  # Optional
+    keywords='Yolo CNN object-detector pytorch',  # Optional
 )
